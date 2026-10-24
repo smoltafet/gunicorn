@@ -1552,6 +1552,30 @@ class AccessLogFormat(Setting):
         """
 
 
+class ErrorLogFormat(Setting):
+    name = "error_log_format"
+    section = "Logging"
+    cli = ["--error-logformat"]
+    meta = "STRING"
+    validator = validate_string
+    default = None
+    desc = """\
+        The error log format.
+
+        This is a format string as understood by :class:`logging.Formatter`,
+        applied to the handler that writes the error log (the ``errorlog``
+        setting). It accepts the standard ``LogRecord`` attributes, for
+        example::
+
+            %(asctime)s [%(process)d] [%(levelname)s] %(message)s
+
+        When it is not set, the built-in default error log format is used,
+        exactly as in previous versions.
+
+        .. versionadded:: 26.3
+        """
+
+
 class ErrorLog(Setting):
     name = "errorlog"
     section = "Logging"

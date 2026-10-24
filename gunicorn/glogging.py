@@ -216,8 +216,10 @@ class Logger:
             os.dup2(self.logfile.fileno(), sys.stdout.fileno())
             os.dup2(self.logfile.fileno(), sys.stderr.fileno())
 
-        self._set_handler(self.error_log, cfg.errorlog,
-                          logging.Formatter(self.error_fmt, self.datefmt))
+        self._set_handler(
+            self.error_log, cfg.errorlog,
+            logging.Formatter(cfg.error_log_format or self.error_fmt,
+                              self.datefmt))
 
         # set gunicorn.access handler
         if cfg.accesslog is not None:

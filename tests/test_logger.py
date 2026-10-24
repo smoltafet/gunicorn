@@ -195,3 +195,89 @@ def test_setup_twice_does_not_stack_syslog_handlers():
         for log in (logger.error_log, logger.access_log):
             for handler in list(log.handlers):
                 log.removeHandler(handler)
+
+
+def _gunicorn_error_handlers(logger):
+    return [
+        h for h in logger.error_log.handlers
+        if getattr(h, '_gunicorn', False)
+    ]
+
+
+def test_error_log_format_default_matches_builtin():
+    """Without error_log_format, the error handler keeps the old format."""
+    cfg = Config()
+    assert cfg.error_log_format is None
+    logger = Logger(cfg)
+    try:
+        handlers = _gunicorn_error_handlers(logger)
+        assert len(handlers) == 1
+        formatter = handlers[0].formatter
+        assert formatter._fmt == Logger.error_fmt
+        record = logging.LogRecord(
+            'gunicorn.error', logging.INFO, __file__, 1,
+            'hello', (), None,
+        )
+        assert formatter.format(record).endswith('[INFO] hello')
+    finally:
+        for handler in list(logger.error_log.handlers):
+            logger.error_log.removeHandler(handler)
+
+
+def test_error_log_format_is_applied(tmp_path):
+    """A custom error_log_format controls error log output."""
+    cfg = Config()
+    cfg.set('errorlog', str(tmp_path / 'error.log'))
+    cfg.set('error_log_format', 'ERR|%(levelname)s|%(message)s')
+    logger = Logger(cfg)
+    try:
+        logger.error('something broke')
+        for handler in logger.error_log.handlers:
+            handler.flush()
+        content = (tmp_path / 'error.log').read_text()
+        assert content == 'ERR|ERROR|something broke\n'
+    finally:
+        for handler in list(logger.error_log.handlers):
+            logger.error_log.removeHandler(handler)
+
+
+def test_error_log_format_reapplied_on_setup(tmp_path):
+    """Re-running setup picks up a changed error_log_format."""
+    cfg = Config()
+    cfg.set('errorlog', str(tmp_path / 'error.log'))
+    cfg.set('error_log_format', 'ONE %(message)s')
+    logger = Logger(cfg)
+    try:
+        cfg.set('error_log_format', 'TWO %(message)s')
+        logger.setup(cfg)
+
+        logger.error('after reload')
+        for handler in logger.error_log.handlers:
+            handler.flush()
+        content = (tmp_path / 'error.log').read_text()
+        assert 'TWO after reload' in content
+        assert 'ONE' not in content
+    finally:
+        for handler in list(logger.error_log.handlers):
+            logger.error_log.removeHandler(handler)
+
+
+def test_error_log_format_does_not_change_access_format(tmp_path):
+    """error_log_format must not leak into the access log format."""
+    cfg = Config()
+    cfg.set('errorlog', str(tmp_path / 'error.log'))
+    cfg.set('error_log_format', 'ERR %(message)s')
+    logger = Logger(cfg)
+    try:
+        handlers = _gunicorn_error_handlers(logger)
+        assert handlers[0].formatter._fmt == 'ERR %(message)s'
+        access_handlers = [
+            h for h in logger.access_log.handlers
+            if getattr(h, '_gunicorn', False)
+        ]
+        for handler in access_handlers:
+            assert handler.formatter._fmt == Logger.access_fmt
+    finally:
+        for log in (logger.error_log, logger.access_log):
+            for handler in list(log.handlers):
+                log.removeHandler(handler)
